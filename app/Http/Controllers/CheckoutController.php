@@ -14,6 +14,9 @@ use App\Models\TravelPackage;
 use Mail;
 use App\Mail\TransactionSuccess;
 
+use Midtrans\Config;
+use Midtrans\Snap;
+
 class CheckoutController extends Controller
 {
     public function index(Request $request, $id)
@@ -106,13 +109,41 @@ class CheckoutController extends Controller
 
         $transaction->save();
 
+        //config midtrans
+        Config::$serverKey = config('midtrans.serverKey');
+        Config::$isProduction = config('midtrans.isProduction');
+        Config::$isSanitized = config('midtrans.isSanitized');
+        Config::$is3ds = config('midtrans.is3ds');
 
+        //array untuk dikirim ke midtrans
+        $midtrans_param = [
+            'transaction_details' => [
+                'order_id' => 'MIDTRAN'.$transaction->id,
+                'gross_amount' => (int)$transaction->transaction_total
+            ],
+            'customer_details' => [
+                'first_name' => $transaction->user->name,
+                'email' => $transaction->user->email
+            ],
+            'enabled_payments' => ['gopay'],
+            'vtweb' => []
+        ];
 
-        Mail::to($transaction->user)->send(
-            new TransactionSuccess($transaction)
-        );
+        try{
+            //ambil halaman payment
+            $paymentUrl = Snap::createTransaction($midtrans_param)->redirect_url;
 
-        return view('pages.success');
+            header('Location: '.$paymentUrl);
+        }
+        catch(Exception $e){
+            echo $e->getMessage();
+        };
+
+        // Mail::to($transaction->user)->send(
+        //     new TransactionSuccess($transaction)
+        // );
+
+        // return view('pages.success');
     }
 }
 
